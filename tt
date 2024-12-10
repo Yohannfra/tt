@@ -58,7 +58,7 @@ def get_projects() -> List[str]:
     return projects
 
 
-def get_record(project_name: str) -> List[Record]:
+def get_records(project_name: str) -> List[Record]:
     records = []
 
     with open(f"{STORAGE_DIR}/records/{project_name}.json", "r") as f:
@@ -80,7 +80,7 @@ def report(projects: List[str]) -> None:
     all_records: dict[str, List[Record]] = {}
 
     for p in projects:
-        all_records[p] = get_record(p)
+        all_records[p] = get_records(p)
 
     console = Console()
 
@@ -110,7 +110,7 @@ def report(projects: List[str]) -> None:
                 project_sum += delta
 
                 table.add_row(
-                    f"[bold]{project}[/bold]" if first_record else "",
+                    f"[bold]{project}[/bold]" if first_record else None,
                     record.task,
                     start.strftime(PRETTY_FORMAT),
                     end.strftime(PRETTY_FORMAT),
@@ -118,7 +118,7 @@ def report(projects: List[str]) -> None:
                 )
             else:
                 table.add_row(
-                    f"[bold]{project}[/bold]" if first_record else "",
+                    f"[bold]{project}[/bold]" if first_record else None,
                     record.task,
                     start.strftime(PRETTY_FORMAT),
                     "N/A",
@@ -130,11 +130,11 @@ def report(projects: List[str]) -> None:
         total_sum += project_sum
 
         table.add_row(
-            "",
-            "",
-            "",
+            None,
+            None,
+            None,
             "[bold]TOTAL[/bold]",
-            "[bold]" + delta_to_str(project_sum) + "[/bold]",
+            f"[bold]{delta_to_str(project_sum)}[/bold]",
         )
         # add blank line
         table.add_row()
@@ -143,11 +143,11 @@ def report(projects: List[str]) -> None:
     table.add_row()
 
     table.add_row(
-        "",
-        "",
-        "",
+        None,
+        None,
+        None,
         "[bold]TOTAL[/bold]",
-        "[bold]" + delta_to_str(total_sum) + "[/bold]",
+        f"[bold]{delta_to_str(total_sum)}[/bold]",
     )
 
     console.print(table)
@@ -280,18 +280,12 @@ def status() -> None:
         return
 
     project, _ = parse_key(current_key)
+    records = get_records(project)
 
-    with open(f"{STORAGE_DIR}/records/{project}.json", "r") as f:
-        fc = f.read()
-        fc_json = json.loads(fc)
-        current_record = fc_json[-1]
+    start = dateutil.parser.isoparse(records[-1].start)
+    now = datetime.datetime.now()
 
-        start = dateutil.parser.isoparse(current_record["start"])
-        now = datetime.datetime.now()
-
-        console.print(
-            f"Tracking {current_key}: {delta_to_str(now - start)}", style="green"
-        )
+    console.print(f"Tracking {current_key}: {delta_to_str(now - start)}", style="green")
 
 
 def delete(project: str) -> None:
@@ -381,21 +375,22 @@ def main():
     if not os.path.isdir(STORAGE_DIR):
         init_storage_dir()
 
-    if args.command == "report":
-        projects = [args.project] if args.project else get_projects()
-        report(projects)
-    elif args.command == "start":
-        start(args.key)
-    elif args.command == "stop":
-        stop()
-    elif args.command == "status":
-        status()
-    elif args.command == "list":
-        list_projects()
-    elif args.command == "delete":
-        delete(args.project)
-    elif args.command == "edit":
-        edit(args.project)
+    match args.command:
+        case "report":
+            projects = [args.project] if args.project else get_projects()
+            report(projects)
+        case "start":
+            start(args.key)
+        case "stop":
+            stop()
+        case "status":
+            status()
+        case "list":
+            list_projects()
+        case "delete":
+            delete(args.project)
+        case "edit":
+            edit(args.project)
 
 
 if __name__ == "__main__":
