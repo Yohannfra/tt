@@ -10,6 +10,7 @@ from typing import List
 from rich.console import Console
 from rich.table import Table
 from dataclasses import dataclass
+from rich.tree import Tree
 
 import dateutil.parser
 
@@ -21,33 +22,25 @@ class Record:
     task: str
 
 
-STORAGE_DIR = ".tt"
+HOME_DIR = os.environ.get("HOME")
+if not HOME_DIR:
+    sys.exit("$HOME not defined")
 
-# argument parser config
-parser = argparse.ArgumentParser(prog="tt")
-
-subparsers = parser.add_subparsers(
-    title="commands", dest="command", required=True, help="Available commands"
-)
-subparsers.add_parser("start", help="Start tracking time").add_argument(
-    "key",
-    help="The name of the task or the project to start tracking ex: myapp | auth@myapp",
-)
-
-subparsers.add_parser("stop", help="Stop tracking your time")
-subparsers.add_parser("delete", help="Delete a resource")
-subparsers.add_parser("report", help="Display report")
-subparsers.add_parser("status", help="Display the current tracking status")
-parser.add_argument("-v", "--version", action="store_true", help="Version for tt")
+STORAGE_DIR = HOME_DIR + "/.tt"
 
 
 def get_projects() -> List[str]:
     projects = []
-    with open(f"{STORAGE_DIR}/projects.json", "r") as f:
-        fc = f.read()
-        fc_json = json.loads(fc)
-        for p in fc_json:
-            projects.append(p["name"])
+
+    directory = f"{STORAGE_DIR}/records"
+    files = [
+        item
+        for item in os.listdir(directory)
+        if os.path.isfile(os.path.join(directory, item))
+    ]
+
+    for f in files:
+        projects.append(os.path.splitext(f)[0])
 
     return projects
 
@@ -55,27 +48,22 @@ def get_projects() -> List[str]:
 def get_record(project_name: str) -> List[Record]:
     records = []
 
-    try:
-        with open(f"{STORAGE_DIR}/records/{project_name}.json", "r") as f:
-            fc = f.read()
-            fc_json = json.loads(fc)
-            for r in fc_json:
-                records.append(
-                    Record(
-                        start=r["start"],
-                        end=r["end"],
-                        task=r["task"] if "task" in r else "",
-                    )
+    with open(f"{STORAGE_DIR}/records/{project_name}.json", "r") as f:
+        fc = f.read()
+        fc_json = json.loads(fc)
+        for r in fc_json:
+            records.append(
+                Record(
+                    start=r["start"],
+                    end=r["end"],
+                    task=r["task"] if "task" in r else "",
                 )
-
-    except Exception as error:
-        print(error)
-        sys.exit(1)
+            )
 
     return records
 
 
-def report(projects: List[str]):
+def report(projects: List[str]) -> None:
     all_records: dict[str, List[Record]] = {}
 
     for p in projects:
@@ -84,7 +72,7 @@ def report(projects: List[str]):
     console = Console()
 
     table = Table(show_header=True, header_style="bold")
-    table.add_column("Project", style="bold")
+    table.add_column("Project")
     table.add_column("Task")
     table.add_column("Start")
     table.add_column("End")
@@ -98,34 +86,49 @@ def report(projects: List[str]):
         for record in records:
             PRETTY_FORMAT = "%m/%m/%y %H:%M %Z"
             start = dateutil.parser.isoparse(record.start)
-            end = dateutil.parser.isoparse(record.end)
 
-            delta = end - start
-            hours, remainder = divmod(delta.seconds, 3600)
-            minutes, _ = divmod(remainder, 60)
+            if record.end:
+                end = dateutil.parser.isoparse(record.end)
+            else:
+                end = None
 
-            project_sum += delta
+            if end:
+                delta = end - start
+                hours, remainder = divmod(delta.seconds, 3600)
+                minutes, _ = divmod(remainder, 60)
 
-            table.add_row(
-                project if first_record else "",
-                record.task,
-                start.strftime(PRETTY_FORMAT),
-                end.strftime(PRETTY_FORMAT),
-                (f"{project_sum.days}d" if project_sum.days > 0 else "")
-                + f" {hours}h:{minutes}m",
-            )
+                project_sum += delta
+
+                table.add_row(
+                    f"[bold]{project}[/bold]" if first_record else "",
+                    record.task,
+                    start.strftime(PRETTY_FORMAT),
+                    end.strftime(PRETTY_FORMAT),
+                    (f"{delta.days}d" if delta.days > 0 else "")
+                    + f" {hours}h:{minutes}m",
+                )
+            else:
+                table.add_row(
+                    f"[bold]{project}[/bold]" if first_record else "",
+                    record.task,
+                    start.strftime(PRETTY_FORMAT),
+                    "N/A",
+                    "N/A",
+                )
+
             first_record = False
 
         total_sum += project_sum
         hours, remainder = divmod(project_sum.seconds, 3600)
         minutes, _ = divmod(remainder, 60)
         table.add_row(
-            ".",
-            ".",
-            ".",
-            "TOTAL",
-            (f"{project_sum.days}d" if project_sum.days > 0 else "")
-            + f" {hours}h:{minutes}m",
+            "",
+            "",
+            "",
+            "[bold]TOTAL[/bold]",
+            "[bold]"
+            + (f"{project_sum.days}d" if project_sum.days > 0 else "")
+            + f" {hours}h:{minutes}m[/bold]",
         )
         # add blank line
         table.add_row()
@@ -137,11 +140,11 @@ def report(projects: List[str]):
     minutes, _ = divmod(remainder, 60)
 
     table.add_row(
-        ".",
-        ".",
-        ".",
-        "TOTAL",
-        f"{total_sum.days}d {hours}h:{minutes}m",
+        "",
+        "",
+        "",
+        "[bold]TOTAL[/bold]",
+        f"[bold]{total_sum.days}d {hours}h:{minutes}m[/bold]",
     )
 
     console.print(table)
@@ -152,12 +155,13 @@ def init_storage_dir() -> None:
 
     os.mkdir(STORAGE_DIR)
     os.mkdir(STORAGE_DIR + "/records")
-    with open(STORAGE_DIR + "/projects.json", "w+") as f:
-        f.write("[]")
     set_current("")
 
 
-def get_current():
+def get_current() -> str | None:
+    """
+    Read the current.json file and return the name of the current project
+    """
     with open(f"{STORAGE_DIR}/current.json", "r") as f:
         fc = f.read()
         fc_json = json.loads(fc)
@@ -168,12 +172,12 @@ def get_current():
     return None
 
 
-def set_current(key: str):
+def set_current(key: str) -> None:
     with open(f"{STORAGE_DIR}/current.json", "w") as f:
-        f.write(json.dumps({"key": key}))
+        f.write(json.dumps({"key": key}, indent=4))
 
 
-def parse_key(key: str):
+def parse_key(key: str) -> tuple[str, str | None]:
     task = None
     project = None
 
@@ -185,12 +189,49 @@ def parse_key(key: str):
         project = key
 
     if not project:
-        return None
+        sys.exit("Key is not valid, project is empty")
 
     return project, task
 
 
-def start(key: str):
+def start_record(key: str) -> None:
+    project, task = parse_key(key)
+
+    now = datetime.datetime.now().isoformat()
+
+    with open(f"{STORAGE_DIR}/records/{project}.json", "a+") as f:
+        f.seek(0)
+        fc = f.read()
+        if not fc:
+            fc = "[]"
+        fc_json = json.loads(fc)
+        fc_json.append({"start": now, "task": task if task else None, "end": None})
+        f.seek(0)
+        f.truncate(0)
+        f.write(json.dumps(fc_json, indent=4))
+
+
+def stop_record(current_key: str) -> None:
+    project, _ = parse_key(current_key)
+
+    now = datetime.datetime.now().isoformat()
+
+    with open(f"{STORAGE_DIR}/records/{project}.json", "a+") as f:
+        f.seek(0)
+        fc = f.read()
+        if not fc:
+            fc = "[]"
+        fc_json = json.loads(fc)
+        fc_json[-1]["end"] = now
+        f.seek(0)
+        f.truncate(0)
+        f.write(json.dumps(fc_json, indent=4))
+
+
+def start(key: str) -> None:
+    # verify that key is valid and parsable
+    parse_key(key)
+
     current_key = get_current()
 
     console = Console()
@@ -209,15 +250,24 @@ def start(key: str):
 
     console.print(f"Started tracking time for {key}", style="green")
     set_current(key)
+    start_record(key)
 
 
-def stop():
+def stop() -> None:
+    current_key = get_current()
+
     console = Console()
+
+    if not current_key:
+        console.print("Time tracking is not started", style="red")
+        sys.exit(1)
+
     console.print("Stoped tracking time", style="green")
+    stop_record(current_key)
     set_current("")
 
 
-def status():
+def status() -> None:
     current_key = get_current()
 
     console = Console()
@@ -228,12 +278,87 @@ def status():
         console.print(f"Tracking {current_key}", style="green")
 
 
-def delete():
+def delete(project: str) -> None:
+    fp = f"{STORAGE_DIR}/records/{project}.json"
+
     console = Console()
-    console.print("TODO", style="red")
+
+    if not os.path.isfile(fp):
+        console.print(f"Project {project} not found", style="red")
+        sys.exit(1)
+
+    os.remove(fp)
+    console.print(f"Project {project} deleted", style="yellow")
+
+
+def edit(project: str) -> None:
+    fp = f"{STORAGE_DIR}/records/{project}.json"
+
+    if not os.path.isfile(fp):
+        console = Console()
+        console.print(f"Project {project} not found", style="red")
+        sys.exit(1)
+
+    print(f"Opening {fp} with {os.environ.get('EDITOR')}")
+    os.system(f"$EDITOR {fp}")
+    print("Ok")
+
+
+def list_projects() -> None:
+    projects = get_projects()
+
+    console = Console()
+
+    tree = Tree("Projects")
+
+    for p in projects:
+        tree.add(p)
+
+    console.print(tree)
 
 
 def main():
+    # argparse config
+    parser = argparse.ArgumentParser(prog="tt")
+
+    subparsers = parser.add_subparsers(
+        title="commands", dest="command", required=True, help="Available commands"
+    )
+
+    # start
+    subparsers.add_parser("start", help="Start tracking time").add_argument(
+        "key",
+        help="The name of the task or the project to start tracking ex: myapp | auth@myapp",
+    )
+
+    # edit
+    subparsers.add_parser("edit", help="Edit a project with $EDITOR").add_argument(
+        "project",
+        help="The name of the project to edit",
+    )
+
+    # stop
+    subparsers.add_parser("stop", help="Stop tracking your time")
+
+    # delete
+    subparsers.add_parser("delete", help="Delete a project").add_argument(
+        "project",
+        help="The name of the project to delete",
+    )
+
+    # report
+    subparsers.add_parser("report", help="Display report").add_argument(
+        "project",
+        nargs="?",
+        help="The name of the project to report",
+    )
+
+    # list
+    subparsers.add_parser("list", help="List projects")
+
+    # status
+    subparsers.add_parser("status", help="Display the current tracking status")
+
     args = parser.parse_args()
 
     # create STORAGE_DIR if it doesn't exists
@@ -241,7 +366,7 @@ def main():
         init_storage_dir()
 
     if args.command == "report":
-        projects = get_projects()
+        projects = [args.project] if args.project else get_projects()
         report(projects)
     elif args.command == "start":
         start(args.key)
@@ -249,8 +374,12 @@ def main():
         stop()
     elif args.command == "status":
         status()
+    elif args.command == "list":
+        list_projects()
     elif args.command == "delete":
-        pass
+        delete(args.project)
+    elif args.command == "edit":
+        edit(args.project)
 
 
 if __name__ == "__main__":
