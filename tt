@@ -84,7 +84,7 @@ def report(projects: List[str]) -> None:
 
         first_record = True
         for record in records:
-            PRETTY_FORMAT = "%m/%m/%y %H:%M %Z"
+            PRETTY_FORMAT = "%d/%m/%y %H:%M %Z"
             start = dateutil.parser.isoparse(record.start)
 
             if record.end:
