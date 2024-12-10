@@ -8,3 +8,8 @@ dependencies = [
     "python-dateutil>=2.9.0.post0",
     "rich>=13.9.4",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.2",
+]
