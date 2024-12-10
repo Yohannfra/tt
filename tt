@@ -29,6 +29,19 @@ if not HOME_DIR:
 STORAGE_DIR = HOME_DIR + "/.tt"
 
 
+def delta_to_str(delta: datetime.timedelta) -> str:
+    s = ""
+
+    hours, remainder = divmod(delta.seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+
+    if delta.days > 0:
+        s += f"{delta.days}d "
+    s += f"{hours}h:{minutes}m"
+
+    return s
+
+
 def get_projects() -> List[str]:
     projects = []
 
@@ -94,9 +107,6 @@ def report(projects: List[str]) -> None:
 
             if end:
                 delta = end - start
-                hours, remainder = divmod(delta.seconds, 3600)
-                minutes, _ = divmod(remainder, 60)
-
                 project_sum += delta
 
                 table.add_row(
@@ -104,8 +114,7 @@ def report(projects: List[str]) -> None:
                     record.task,
                     start.strftime(PRETTY_FORMAT),
                     end.strftime(PRETTY_FORMAT),
-                    (f"{delta.days}d" if delta.days > 0 else "")
-                    + f" {hours}h:{minutes}m",
+                    delta_to_str(delta),
                 )
             else:
                 table.add_row(
@@ -119,16 +128,13 @@ def report(projects: List[str]) -> None:
             first_record = False
 
         total_sum += project_sum
-        hours, remainder = divmod(project_sum.seconds, 3600)
-        minutes, _ = divmod(remainder, 60)
+
         table.add_row(
             "",
             "",
             "",
             "[bold]TOTAL[/bold]",
-            "[bold]"
-            + (f"{project_sum.days}d" if project_sum.days > 0 else "")
-            + f" {hours}h:{minutes}m[/bold]",
+            "[bold]" + delta_to_str(project_sum) + "[/bold]",
         )
         # add blank line
         table.add_row()
@@ -136,15 +142,12 @@ def report(projects: List[str]) -> None:
     # add blank line
     table.add_row()
 
-    hours, remainder = divmod(total_sum.seconds, 3600)
-    minutes, _ = divmod(remainder, 60)
-
     table.add_row(
         "",
         "",
         "",
         "[bold]TOTAL[/bold]",
-        f"[bold]{total_sum.days}d {hours}h:{minutes}m[/bold]",
+        "[bold]" + delta_to_str(total_sum) + "[/bold]",
     )
 
     console.print(table)
@@ -274,8 +277,21 @@ def status() -> None:
 
     if not current_key:
         console.print("Not tracking anything", style="yellow")
-    else:
-        console.print(f"Tracking {current_key}", style="green")
+        return
+
+    project, _ = parse_key(current_key)
+
+    with open(f"{STORAGE_DIR}/records/{project}.json", "r") as f:
+        fc = f.read()
+        fc_json = json.loads(fc)
+        current_record = fc_json[-1]
+
+        start = dateutil.parser.isoparse(current_record["start"])
+        now = datetime.datetime.now()
+
+        console.print(
+            f"Tracking {current_key}: {delta_to_str(now - start)}", style="green"
+        )
 
 
 def delete(project: str) -> None:
