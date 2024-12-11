@@ -251,9 +251,36 @@ def start(key: str) -> None:
             )
             sys.exit(1)
 
-    console.print(f"Started tracking time for {key}", style="green")
     set_current(key)
     start_record(key)
+    console.print(f"Started tracking time for {key}", style="green")
+
+
+def reset() -> None:
+    current_key = get_current()
+
+    console = Console()
+
+    if not current_key:
+        console.print("Time tracking is not started", style="red")
+        sys.exit(1)
+
+    project, _ = parse_key(current_key)
+
+    now = datetime.datetime.now().isoformat()
+
+    with open(f"{STORAGE_DIR}/records/{project}.json", "a+") as f:
+        f.seek(0)
+        fc = f.read()
+        if not fc:
+            fc = "[]"
+        fc_json = json.loads(fc)
+        fc_json[-1]["start"] = now
+        f.seek(0)
+        f.truncate(0)
+        f.write(json.dumps(fc_json, indent=4))
+
+    console.print(f"Reseted time tracking for {current_key}", style="green")
 
 
 def stop() -> None:
@@ -265,9 +292,9 @@ def stop() -> None:
         console.print("Time tracking is not started", style="red")
         sys.exit(1)
 
-    console.print("Stoped tracking time", style="green")
     stop_record(current_key)
     set_current("")
+    console.print("Stoped tracking time", style="green")
 
 
 def status() -> None:
@@ -350,6 +377,9 @@ def main():
     # stop
     subparsers.add_parser("stop", help="Stop tracking your time")
 
+    # reset
+    subparsers.add_parser("reset", help="Reset the current tracking")
+
     # delete
     subparsers.add_parser("delete", help="Delete a project").add_argument(
         "project",
@@ -383,6 +413,8 @@ def main():
             start(args.key)
         case "stop":
             stop()
+        case "reset":
+            reset()
         case "status":
             status()
         case "list":
