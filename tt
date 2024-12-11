@@ -197,40 +197,6 @@ def parse_key(key: str) -> tuple[str, str | None]:
     return project, task
 
 
-def start_record(key: str) -> None:
-    project, task = parse_key(key)
-
-    now = datetime.datetime.now().isoformat()
-
-    with open(f"{STORAGE_DIR}/records/{project}.json", "a+") as f:
-        f.seek(0)
-        fc = f.read()
-        if not fc:
-            fc = "[]"
-        fc_json = json.loads(fc)
-        fc_json.append({"start": now, "task": task if task else None, "end": None})
-        f.seek(0)
-        f.truncate(0)
-        f.write(json.dumps(fc_json, indent=4))
-
-
-def stop_record(current_key: str) -> None:
-    project, _ = parse_key(current_key)
-
-    now = datetime.datetime.now().isoformat()
-
-    with open(f"{STORAGE_DIR}/records/{project}.json", "a+") as f:
-        f.seek(0)
-        fc = f.read()
-        if not fc:
-            fc = "[]"
-        fc_json = json.loads(fc)
-        fc_json[-1]["end"] = now
-        f.seek(0)
-        f.truncate(0)
-        f.write(json.dumps(fc_json, indent=4))
-
-
 def start(key: str) -> None:
     # verify that key is valid and parsable
     parse_key(key)
@@ -251,8 +217,22 @@ def start(key: str) -> None:
             )
             sys.exit(1)
 
+    project, task = parse_key(key)
+
+    now = datetime.datetime.now().isoformat()
+
+    with open(f"{STORAGE_DIR}/records/{project}.json", "a+") as f:
+        f.seek(0)
+        fc = f.read()
+        if not fc:
+            fc = "[]"
+        fc_json = json.loads(fc)
+        fc_json.append({"start": now, "task": task if task else None, "end": None})
+        f.seek(0)
+        f.truncate(0)
+        f.write(json.dumps(fc_json, indent=4))
+
     set_current(key)
-    start_record(key)
     console.print(f"Started tracking time for {key}", style="green")
 
 
@@ -272,8 +252,6 @@ def reset() -> None:
     with open(f"{STORAGE_DIR}/records/{project}.json", "a+") as f:
         f.seek(0)
         fc = f.read()
-        if not fc:
-            fc = "[]"
         fc_json = json.loads(fc)
         fc_json[-1]["start"] = now
         f.seek(0)
@@ -281,6 +259,29 @@ def reset() -> None:
         f.write(json.dumps(fc_json, indent=4))
 
     console.print(f"Reseted time tracking for {current_key}", style="green")
+
+
+def cancel() -> None:
+    current_key = get_current()
+
+    console = Console()
+
+    if not current_key:
+        console.print("Time tracking is not started", style="red")
+        sys.exit(1)
+
+    project, _ = parse_key(current_key)
+
+    with open(f"{STORAGE_DIR}/records/{project}.json", "a+") as f:
+        f.seek(0)
+        fc = f.read()
+        fc_json = json.loads(fc)
+        f.seek(0)
+        f.truncate(0)
+        f.write(json.dumps(fc_json[0:-1], indent=4))
+
+    set_current("")
+    console.print(f"Canceled current time tracking for {current_key}", style="green")
 
 
 def stop() -> None:
@@ -292,7 +293,19 @@ def stop() -> None:
         console.print("Time tracking is not started", style="red")
         sys.exit(1)
 
-    stop_record(current_key)
+    project, _ = parse_key(current_key)
+
+    now = datetime.datetime.now().isoformat()
+
+    with open(f"{STORAGE_DIR}/records/{project}.json", "a+") as f:
+        f.seek(0)
+        fc = f.read()
+        fc_json = json.loads(fc)
+        fc_json[-1]["end"] = now
+        f.seek(0)
+        f.truncate(0)
+        f.write(json.dumps(fc_json, indent=4))
+
     set_current("")
     console.print("Stoped tracking time", style="green")
 
@@ -380,6 +393,9 @@ def main():
     # reset
     subparsers.add_parser("reset", help="Reset the current tracking")
 
+    # cancel
+    subparsers.add_parser("cancel", help="Cancel the current tracking")
+
     # delete
     subparsers.add_parser("delete", help="Delete a project").add_argument(
         "project",
@@ -415,6 +431,8 @@ def main():
             stop()
         case "reset":
             reset()
+        case "cancel":
+            cancel()
         case "status":
             status()
         case "list":

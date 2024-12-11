@@ -50,18 +50,20 @@ $ sudo cp tt /usr/local/bin
 ## Usage
 
 ```bash
-$ tt -h
-usage: tt [-h] {start,edit,stop,delete,report,list,status} ...
+$ ./tt -h
+usage: tt [-h] {start,edit,stop,reset,cancel,delete,report,list,status} ...
 
 options:
   -h, --help            show this help message and exit
 
 commands:
-  {start,edit,stop,delete,report,list,status}
+  {start,edit,stop,reset,cancel,delete,report,list,status}
                         Available commands
     start               Start tracking time
     edit                Edit a project with $EDITOR
     stop                Stop tracking your time
+    reset               Reset the current tracking
+    cancel              Cancel the current tracking
     delete              Delete a project
     report              Display report
     list                List projects
