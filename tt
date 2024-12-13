@@ -55,6 +55,7 @@ def get_projects() -> List[str]:
     for f in files:
         projects.append(os.path.splitext(f)[0])
 
+    projects.sort()
     return projects
 
 
